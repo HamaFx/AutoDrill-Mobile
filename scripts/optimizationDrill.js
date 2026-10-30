@@ -99,6 +99,24 @@ function placeWaterExtractorsAndPowerNodes(selection, drill, team, allPlans) {
     }
 }
 
+function routeFlood(free, dist, w, h, sx, sy) {
+    let z = 0;
+    for (z = 0; z < w * h; z++) dist[z] = -1;
+    let queue = [sy * w + sx];
+    let head = 0;
+    dist[queue[0]] = 0;
+    while (head < queue.length) {
+        let cur = queue[head++];
+        let gx = cur % w;
+        let gy = (cur - gx) / w;
+        let nd = dist[cur] + 1;
+        if (gx + 1 < w && free[cur + 1] === 1 && dist[cur + 1] === -1) { dist[cur + 1] = nd; queue.push(cur + 1); }
+        if (gy + 1 < h && free[cur + w] === 1 && dist[cur + w] === -1) { dist[cur + w] = nd; queue.push(cur + w); }
+        if (gx - 1 >= 0 && free[cur - 1] === 1 && dist[cur - 1] === -1) { dist[cur - 1] = nd; queue.push(cur - 1); }
+        if (gy - 1 >= 0 && free[cur - w] === 1 && dist[cur - w] === -1) { dist[cur - w] = nd; queue.push(cur - w); }
+    }
+}
+
 function placeConveyorRouting(selection, team, allPlans) {
     if (selection.length === 0) return;
 
@@ -179,34 +197,26 @@ function placeConveyorRouting(selection, team, allPlans) {
     }
     if (terminals.length === 0) return;
 
-    // exit = the seed furthest from the drill cloud centre (the patch perimeter)
+    // exit = the seed that can reach the most other seeds (never a sealed pocket)
     let cx = (minX + maxX) / 2;
     let cy = (minY + maxY) / 2;
     let root = terminals[0];
-    let bestD = -1;
-    for (let r = 0; r < terminals.length; r++) {
-        let t = terminals[r];
-        let d = Math.max(Math.abs(t.x - cx), Math.abs(t.y - cy));
-        if (d > bestD) {
-            bestD = d;
-            root = t;
+    let bestReach = -1;
+    let bestCheb = -1;
+    for (let cand = 0; cand < terminals.length; cand++) {
+        routeFlood(free, dist, w, h, terminals[cand].x - x0, terminals[cand].y - y0);
+        let reach = 0;
+        for (let t5 = 0; t5 < terminals.length; t5++) {
+            if (dist[(terminals[t5].y - y0) * w + (terminals[t5].x - x0)] >= 0) reach++;
+        }
+        let cheb = Math.max(Math.abs(terminals[cand].x - cx), Math.abs(terminals[cand].y - cy));
+        if (reach > bestReach || (reach === bestReach && cheb > bestCheb)) {
+            bestReach = reach;
+            bestCheb = cheb;
+            root = terminals[cand];
         }
     }
-
-    // BFS gradient from the exit tile
-    let queue = [(root.y - y0) * w + (root.x - x0)];
-    let head = 0;
-    dist[queue[0]] = 0;
-    while (head < queue.length) {
-        let cur = queue[head++];
-        let gx = cur % w;
-        let gy = (cur - gx) / w;
-        let nd = dist[cur] + 1;
-        if (gx + 1 < w && free[cur + 1] === 1 && dist[cur + 1] === -1) { dist[cur + 1] = nd; queue.push(cur + 1); }
-        if (gy + 1 < h && free[cur + w] === 1 && dist[cur + w] === -1) { dist[cur + w] = nd; queue.push(cur + w); }
-        if (gx - 1 >= 0 && free[cur - 1] === 1 && dist[cur - 1] === -1) { dist[cur - 1] = nd; queue.push(cur - 1); }
-        if (gy - 1 >= 0 && free[cur - w] === 1 && dist[cur - w] === -1) { dist[cur - w] = nd; queue.push(cur - w); }
-    }
+    routeFlood(free, dist, w, h, root.x - x0, root.y - y0);
 
     // walk every seed up the gradient toward the exit, merging into existing belts
     let placed = [];
@@ -271,6 +281,18 @@ function placeConveyorRouting(selection, team, allPlans) {
         else if (root.y - 1 >= y0 && dist[(root.y - 1 - y0) * w + (root.x - x0)] === 1) erot = 1;
         else if (root.x + 1 <= x1 && dist[(root.y - y0) * w + (root.x + 1 - x0)] === 1) erot = 2;
         else if (root.y + 1 <= y1 && dist[(root.y + 1 - y0) * w + (root.x - x0)] === 1) erot = 3;
+        if (erot === -1 && root.bounds !== undefined) {
+            // dead-end pocket: still give the drill a belt, aimed away from it
+            let cxb = (root.bounds.minX + root.bounds.maxX - 1) / 2;
+            let cyb = (root.bounds.minY + root.bounds.maxY - 1) / 2;
+            let dxb = root.x - cxb;
+            let dyb = root.y - cyb;
+            if (Math.abs(dxb) >= Math.abs(dyb)) {
+                erot = dxb >= 0 ? 0 : 2;
+            } else {
+                erot = dyb >= 0 ? 1 : 3;
+            }
+        }
         if (erot !== -1) {
             allPlans.push(new BuildPlan(root.x | 0, root.y | 0, erot | 0, belt));
         }
@@ -330,14 +352,14 @@ function fill(tile, drill, waterExtractorsAndPowerNodes) {
         }
     }
 
-    let placeSupportKey = Core.bundle.get("auto-drill.settings.place-water-extractor-and-power-nodes");
-    if (waterExtractorsAndPowerNodes && Core.settings.getBool(placeSupportKey, true)) {
-        placeWaterExtractorsAndPowerNodes(selection, drill, team, allPlans);
-    }
-
     let routingKey = Core.bundle.get("auto-drill.settings.place-conveyor-routing");
     if (Core.settings.getBool(routingKey, true)) {
         placeConveyorRouting(selection, team, allPlans);
+    }
+
+    let placeSupportKey = Core.bundle.get("auto-drill.settings.place-water-extractor-and-power-nodes");
+    if (waterExtractorsAndPowerNodes && Core.settings.getBool(placeSupportKey, true)) {
+        placeWaterExtractorsAndPowerNodes(selection, drill, team, allPlans);
     }
 
     Util.commitPlans(allPlans);
