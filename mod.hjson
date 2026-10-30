@@ -1,0 +1,8 @@
+displayName: "AutoDrill"
+name: "auto-drill"
+author: "Pointifix"
+description: "Adds tools for automatically filling resource patches with drills (Mobile & iOS compatible)"
+version: "1.0.0"
+minGameVersion: "158"
+hidden: true
+iosCompatible: true
