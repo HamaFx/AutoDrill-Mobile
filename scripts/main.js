@@ -31,6 +31,36 @@ function getButtonSize() {
     return Vars.mobile ? 40 : 30;
 }
 
+// Diagnostic breadcrumbs: written to the game's log file so a crash between
+// "start" and "done" pinpoints the failing step even without an error dialog.
+function logStep(msg) {
+    Log.info("[AutoDrill] " + msg);
+}
+
+// Runs a step so that any failure is logged and shown as an in-game error
+// dialog instead of silently taking the game down.
+function guard(name, fn) {
+    return function(arg) {
+        logStep(name + " start");
+        try {
+            let result = fn(arg);
+            logStep(name + " done");
+            return result;
+        } catch (e) {
+            let detail = "" + e;
+            if (e != null && e.stack != null) {
+                detail = detail + "\n" + e.stack;
+            }
+            Log.err("[AutoDrill] " + name + " FAILED: " + detail);
+            try {
+                Vars.ui.showException(new java.lang.RuntimeException("[AutoDrill] " + name + " failed:\n\n" + detail));
+            } catch (e2) {
+                Log.err("[AutoDrill] error reporting failed: " + e2);
+            }
+        }
+    };
+}
+
 function setEnabled(val) {
     state.enabled = !!val;
     if (state.enableButton != null) {
@@ -208,82 +238,82 @@ function buildSelectTable() {
     state.mechanicalDrillButton = state.selectTable.button(
         new TextureRegionDrawable(Core.atlas.find("block-mechanical-drill-full")),
         Styles.defaulti,
-        run(function() {
+        run(guard("mechanical button", function() {
             setEnabled(false);
             state.directionTable.visible = true;
             state.popupOpenedFrame = Core.graphics.getFrameId();
-            state.directionAction = function(dir) {
+            state.directionAction = guard("mechanical fill", function(dir) {
                 BridgeDrill.fill(state.selectedTile, Blocks.mechanicalDrill, dir);
-            };
-        })
+            });
+        }))
     ).get();
     state.mechanicalDrillButton.resizeImage(bSize);
 
     state.pneumaticDrillButton = state.selectTable.button(
         new TextureRegionDrawable(Core.atlas.find("block-pneumatic-drill-full")),
         Styles.defaulti,
-        run(function() {
+        run(guard("pneumatic button", function() {
             setEnabled(false);
             state.directionTable.visible = true;
             state.popupOpenedFrame = Core.graphics.getFrameId();
-            state.directionAction = function(dir) {
+            state.directionAction = guard("pneumatic fill", function(dir) {
                 BridgeDrill.fill(state.selectedTile, Blocks.pneumaticDrill, dir);
-            };
-        })
+            });
+        }))
     ).get();
     state.pneumaticDrillButton.resizeImage(bSize);
 
     state.laserDrillButton = state.selectTable.button(
         new TextureRegionDrawable(Core.atlas.find("block-laser-drill-full")),
         Styles.defaulti,
-        run(function() {
+        run(guard("laser fill", function() {
             setEnabled(false);
             OptimizationDrill.fill(state.selectedTile, Blocks.laserDrill);
-        })
+        }))
     ).get();
     state.laserDrillButton.resizeImage(bSize);
 
     state.blastDrillButton = state.selectTable.button(
         new TextureRegionDrawable(Core.atlas.find("block-blast-drill-full")),
         Styles.defaulti,
-        run(function() {
+        run(guard("blast fill", function() {
             setEnabled(false);
             OptimizationDrill.fill(state.selectedTile, Blocks.blastDrill);
-        })
+        }))
     ).get();
     state.blastDrillButton.resizeImage(bSize);
 
     state.plasmaBoreButton = state.selectTable.button(
         new TextureRegionDrawable(Core.atlas.find("block-plasma-bore-full")),
         Styles.defaulti,
-        run(function() {
+        run(guard("plasma button", function() {
             setEnabled(false);
             state.directionTable.visible = true;
             state.popupOpenedFrame = Core.graphics.getFrameId();
-            state.directionAction = function(dir) {
+            state.directionAction = guard("plasma fill", function(dir) {
                 WallDrill.fill(state.selectedTile, Blocks.plasmaBore, dir);
-            };
-        })
+            });
+        }))
     ).get();
     state.plasmaBoreButton.resizeImage(bSize);
 
     state.impactDrillButton = state.selectTable.button(
         new TextureRegionDrawable(Core.atlas.find("block-impact-drill-full")),
         Styles.defaulti,
-        run(function() {
+        run(guard("impact fill", function() {
             setEnabled(false);
             OptimizationDrill.fill(state.selectedTile, Blocks.impactDrill, false);
-        })
+        }))
     ).get();
     state.impactDrillButton.resizeImage(bSize);
 
     state.eruptionDrillButton = state.selectTable.button(
         new TextureRegionDrawable(Core.atlas.find("block-eruption-drill-full")),
         Styles.defaulti,
-        run(function() {
+        run(guard("eruption fill", function() {
             setEnabled(false);
             OptimizationDrill.fill(state.selectedTile, Blocks.eruptionDrill, false);
-        })
+        }))
     ).get();
     state.eruptionDrillButton.resizeImage(bSize);
 
@@ -415,7 +445,7 @@ function initAutoDrill() {
     }));
 
     // Tile tap handler
-    Events.on(TapEvent, cons(function(event) {
+    Events.on(TapEvent, cons(guard("tap", function(event) {
         if (!state.enabled || event.player !== Vars.player || event.tile == null) return;
 
         state.selectedTile = event.tile;
@@ -442,7 +472,7 @@ function initAutoDrill() {
                 }
             }));
         }
-    }));
+    })));
 
     // HUD Toggle Button
     const bSize = getButtonSize();
@@ -450,9 +480,9 @@ function initAutoDrill() {
         state.enableButton = t.button(
             new TextureRegionDrawable(Core.atlas.find("auto-drill-logo")),
             Styles.emptyTogglei,
-            run(function() {
+            run(guard("toggle button", function() {
                 setEnabled(!state.enabled);
-            })
+            }))
         ).size(bSize + 12).get();
         state.enableButton.resizeImage(bSize);
         // Element.visible is a public boolean field that shadows the visible(Boolp)
