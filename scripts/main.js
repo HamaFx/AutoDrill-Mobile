@@ -83,15 +83,15 @@ function showWelcomeDialogIfNeeded() {
 
     t.labelWrap(bundle.get("auto-drill-welcome-text")).growX().fillX().padTop(10).row();
     t.labelWrap(bundle.get("auto-drill-tutorial-text")).growX().fillX().padTop(10).row();
-    t.image(new TextureRegionDrawable(Core.atlas.find("auto-drill-tutorial"))).maxWidth(maxWidth).scaling(Scaling.fit).padTop(10).get().setWidth(maxWidth);
+    t.image(new TextureRegionDrawable(Core.atlas.find("auto-drill-mobile-tutorial"))).maxWidth(maxWidth).scaling(Scaling.fit).padTop(10).get().setWidth(maxWidth);
     t.row();
 
     t.labelWrap(bundle.get("auto-drill-tutorial2-text")).growX().fillX().padTop(10).row();
-    t.image(new TextureRegionDrawable(Core.atlas.find("auto-drill-tutorial2"))).maxWidth(maxWidth).scaling(Scaling.fit).padTop(10).get().setWidth(maxWidth);
+    t.image(new TextureRegionDrawable(Core.atlas.find("auto-drill-mobile-tutorial2"))).maxWidth(maxWidth).scaling(Scaling.fit).padTop(10).get().setWidth(maxWidth);
     t.row();
 
     t.labelWrap(bundle.get("auto-drill-settings-text")).growX().fillX().padTop(10).row();
-    t.image(new TextureRegionDrawable(Core.atlas.find("auto-drill-settings"))).maxWidth(maxWidth).scaling(Scaling.fit).padTop(10).get().setWidth(maxWidth);
+    t.image(new TextureRegionDrawable(Core.atlas.find("auto-drill-mobile-settings"))).maxWidth(maxWidth).scaling(Scaling.fit).padTop(10).get().setWidth(maxWidth);
     t.row();
 
     t.labelWrap(bundle.get("auto-drill-conclusion-text")).growX().fillX().padTop(10).row();
@@ -211,7 +211,7 @@ function registerSettings() {
 
     Vars.ui.settings.addCategory(
         bundle.get("auto-drill.settings.title"),
-        new TextureRegionDrawable(Core.atlas.find("auto-drill-logo")),
+        new TextureRegionDrawable(Core.atlas.find("auto-drill-mobile-logo")),
         builder
     );
 }
@@ -479,7 +479,7 @@ function initAutoDrill() {
     const bSize = getButtonSize();
     Vars.ui.hudGroup.fill(cons(function(t) {
         state.enableButton = t.button(
-            new TextureRegionDrawable(Core.atlas.find("auto-drill-logo")),
+            new TextureRegionDrawable(Core.atlas.find("auto-drill-mobile-logo")),
             Styles.emptyTogglei,
             run(guard("toggle button", function() {
                 setEnabled(!state.enabled);
