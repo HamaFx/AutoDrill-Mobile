@@ -455,9 +455,11 @@ function initAutoDrill() {
             })
         ).size(bSize + 12).get();
         state.enableButton.resizeImage(bSize);
-        state.enableButton.visible(boolp(function() {
+        // Element.visible is a public boolean field that shadows the visible(Boolp)
+        // method in Rhino, so the dynamic visibility goes through the visibility field.
+        state.enableButton.visibility = boolp(function() {
             return Core.settings.getBool(Core.bundle.get("auto-drill.settings.display-toggle-button"), true);
-        }));
+        });
 
         t.margin(5);
         t.marginRight(155);

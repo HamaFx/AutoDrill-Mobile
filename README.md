@@ -90,6 +90,9 @@ Mindustry iOS JavaScript engine (Rhino 1.7.x in interpreter mode,
   (blocks/loops) — use `let`;
 - locals captured by nested functions must be `const` (or held in a single
   `const` state object) — captured `let`/`var` locals are shared between calls;
+- public Java fields shadow same-named methods in Rhino: `Element.visible` is a
+  field, so dynamic visibility is set via the `visibility` field instead of
+  calling `visible(Boolp)`;
 - no template literals (`${...}` is not interpolated);
 - no `for (const x of ...)` (syntax error in that engine);
 - top-level declarations always get an initializer;
