@@ -18,8 +18,12 @@ itself changed: same buttons, same layouts, same settings.
 - **Laser / Airblast drill**: finds the best non-overlapping drill layout with
   a branch-and-bound search, places water extractors and power nodes next to
   each drill, and (optionally) routes every drill's output into a connected
-  conveyor/duct tree that exits at the patch edge — connect that exit to your
-  base. Toggle it via **Place Conveyor Routing** in the mod settings; with the
+  conveyor/duct tree. The tree automatically merges into the nearest existing
+  belt, container or core (within ~24 tiles) so patches drain straight into
+  your logistics; if nothing is nearby, the tree exits at the patch edge for
+  you to connect. Every drill gets an adjacent belt when physically possible —
+  drills sealed inside a dense cluster still get a stub belt to extend.
+  Toggle it via **Place Conveyor Routing** in the mod settings; with the
   toggle off the fill behaves exactly as before.
 - **Plasma bore (Erekir)**: fills wall ore with plasma bores, routes ducts
   back to the base direction and chains beam nodes.
