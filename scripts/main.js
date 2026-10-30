@@ -12,6 +12,7 @@ const state = {
     enabled: false,
     selectedTile: null,
     directionAction: null,
+    tapSuppressFrame: -1,
     popupOpenedFrame: -1,
 
     selectTable: null,
@@ -240,7 +241,8 @@ function buildSelectTable() {
         new TextureRegionDrawable(Core.atlas.find("block-mechanical-drill-full")),
         Styles.defaulti,
         run(guard("mechanical button", function() {
-            setEnabled(false);
+            state.selectTable.visible = false;
+            state.tapSuppressFrame = Core.graphics.getFrameId() + 2;
             state.directionTable.visible = true;
             state.popupOpenedFrame = Core.graphics.getFrameId();
             state.directionAction = guard("mechanical fill", function(dir) {
@@ -254,7 +256,8 @@ function buildSelectTable() {
         new TextureRegionDrawable(Core.atlas.find("block-pneumatic-drill-full")),
         Styles.defaulti,
         run(guard("pneumatic button", function() {
-            setEnabled(false);
+            state.selectTable.visible = false;
+            state.tapSuppressFrame = Core.graphics.getFrameId() + 2;
             state.directionTable.visible = true;
             state.popupOpenedFrame = Core.graphics.getFrameId();
             state.directionAction = guard("pneumatic fill", function(dir) {
@@ -268,7 +271,8 @@ function buildSelectTable() {
         new TextureRegionDrawable(Core.atlas.find("block-laser-drill-full")),
         Styles.defaulti,
         run(guard("laser fill", function() {
-            setEnabled(false);
+            state.selectTable.visible = false;
+            state.tapSuppressFrame = Core.graphics.getFrameId() + 2;
             OptimizationDrill.fill(state.selectedTile, Blocks.laserDrill);
         }))
     ).get();
@@ -278,7 +282,8 @@ function buildSelectTable() {
         new TextureRegionDrawable(Core.atlas.find("block-blast-drill-full")),
         Styles.defaulti,
         run(guard("blast fill", function() {
-            setEnabled(false);
+            state.selectTable.visible = false;
+            state.tapSuppressFrame = Core.graphics.getFrameId() + 2;
             OptimizationDrill.fill(state.selectedTile, Blocks.blastDrill);
         }))
     ).get();
@@ -288,7 +293,8 @@ function buildSelectTable() {
         new TextureRegionDrawable(Core.atlas.find("block-plasma-bore-full")),
         Styles.defaulti,
         run(guard("plasma button", function() {
-            setEnabled(false);
+            state.selectTable.visible = false;
+            state.tapSuppressFrame = Core.graphics.getFrameId() + 2;
             state.directionTable.visible = true;
             state.popupOpenedFrame = Core.graphics.getFrameId();
             state.directionAction = guard("plasma fill", function(dir) {
@@ -302,7 +308,8 @@ function buildSelectTable() {
         new TextureRegionDrawable(Core.atlas.find("block-impact-drill-full")),
         Styles.defaulti,
         run(guard("impact fill", function() {
-            setEnabled(false);
+            state.selectTable.visible = false;
+            state.tapSuppressFrame = Core.graphics.getFrameId() + 2;
             OptimizationDrill.fill(state.selectedTile, Blocks.impactDrill, false);
         }))
     ).get();
@@ -312,7 +319,8 @@ function buildSelectTable() {
         new TextureRegionDrawable(Core.atlas.find("block-eruption-drill-full")),
         Styles.defaulti,
         run(guard("eruption fill", function() {
-            setEnabled(false);
+            state.selectTable.visible = false;
+            state.tapSuppressFrame = Core.graphics.getFrameId() + 2;
             OptimizationDrill.fill(state.selectedTile, Blocks.eruptionDrill, false);
         }))
     ).get();
@@ -380,6 +388,7 @@ function buildDirectionTable() {
 
     let row1 = state.directionTable.table().get();
     row1.button(Icon.up, Styles.defaulti, run(function() {
+        state.tapSuppressFrame = Core.graphics.getFrameId() + 2;
         if (state.directionAction != null) state.directionAction(Direction.UP);
         state.directionTable.visible = false;
     })).size(cellSize).get().resizeImage(bSize);
@@ -388,15 +397,18 @@ function buildDirectionTable() {
 
     let row2 = state.directionTable.table().get();
     row2.button(Icon.left, Styles.defaulti, run(function() {
+        state.tapSuppressFrame = Core.graphics.getFrameId() + 2;
         if (state.directionAction != null) state.directionAction(Direction.LEFT);
         state.directionTable.visible = false;
     })).size(cellSize).get().resizeImage(bSize);
 
     row2.button(Icon.cancel, Styles.defaulti, run(function() {
+        state.tapSuppressFrame = Core.graphics.getFrameId() + 2;
         state.directionTable.visible = false;
     })).size(cellSize).get().resizeImage(bSize);
 
     row2.button(Icon.right, Styles.defaulti, run(function() {
+        state.tapSuppressFrame = Core.graphics.getFrameId() + 2;
         if (state.directionAction != null) state.directionAction(Direction.RIGHT);
         state.directionTable.visible = false;
     })).size(cellSize).get().resizeImage(bSize);
@@ -405,6 +417,7 @@ function buildDirectionTable() {
 
     let row3 = state.directionTable.table().get();
     row3.button(Icon.down, Styles.defaulti, run(function() {
+        state.tapSuppressFrame = Core.graphics.getFrameId() + 2;
         if (state.directionAction != null) state.directionAction(Direction.DOWN);
         state.directionTable.visible = false;
     })).size(cellSize).get().resizeImage(bSize);
@@ -448,6 +461,7 @@ function initAutoDrill() {
     // Tile tap handler
     Events.on(TapEvent, cons(guard("tap", function(event) {
         if (!state.enabled || event.player !== Vars.player || event.tile == null) return;
+        if (Core.graphics.getFrameId() <= state.tapSuppressFrame) return;
 
         state.selectedTile = event.tile;
         updateSelectTable();

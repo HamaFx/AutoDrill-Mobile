@@ -231,6 +231,38 @@ function routeFlood(free, dist, w, h, sx, sy) {
     }
 }
 
+/** Axis direction index from one point toward another (dominant axis). */
+function dirToward(fromX, fromY, toX, toY) {
+    let dx = toX - fromX;
+    let dy = toY - fromY;
+    if (Math.abs(dx) >= Math.abs(dy)) return dx >= 0 ? 0 : 2;
+    return dy >= 0 ? 1 : 3;
+}
+
+/** Nearest friendly core (used to aim exits at the player's base), or null. */
+function findNearestCore(team, cx, cy) {
+    try {
+        if (Vars.state == null || Vars.state.teams == null) return null;
+        let cores = Vars.state.teams.cores(team);
+        if (cores == null || cores.size === 0) return null;
+        let best = null;
+        let bestD = 0;
+        for (let i = 0; i < cores.size; i++) {
+            let c = cores.get(i);
+            let cxx = c.tileX();
+            let cyy = c.tileY();
+            let d = Math.abs(cxx - cx) + Math.abs(cyy - cy);
+            if (best === null || d < bestD) {
+                best = { x: cxx, y: cyy };
+                bestD = d;
+            }
+        }
+        return best;
+    } catch (e) {
+        return null;
+    }
+}
+
 /**
  * Mechanical-drill style bridge jump: when a drill cannot be reached by belts,
  * send its output over the blockage instead. Finds an axis-aligned chain of
@@ -274,7 +306,17 @@ function tryBridgeJump(bounds, stub, team, allPlans, beltPos, placed, w, h, x0, 
 
                 let touchesNet = false;
                 for (let sj = 0; sj < 4 && !touchesNet; sj++) {
-                    if (beltPos[(px + ROUTING_DIR_X[sj]) + "," + (py + ROUTING_DIR_Y[sj])] === 1) touchesNet = true;
+                    let nx = px + ROUTING_DIR_X[sj];
+                    let ny = py + ROUTING_DIR_Y[sj];
+                    if (beltPos[nx + "," + ny] === 1) {
+                        touchesNet = true;
+                    } else {
+                        // the player's existing item bridges work too (mechanical parity)
+                        let wt = Vars.world.tile(nx, ny);
+                        if (wt !== null && wt.build != null && wt.block() === Blocks.itemBridge && sameTeam(wt.build.team, team)) {
+                            touchesNet = true;
+                        }
+                    }
                 }
 
                 if (touchesNet) {
@@ -444,8 +486,10 @@ function placeConveyorRouting(selection, team, allPlans) {
     // among equals: prefer a seed that can reach the transport, then the closest one
     let cx = (minX + maxX) / 2;
     let cy = (minY + maxY) / 2;
+    let core = findNearestCore(team, cx, cy);
     let root = terminals[0];
     let bestReach = -1;
+    let bestCompSize = -1;
     let bestReachesT = false;
     let bestDistT = -1;
     let bestCheb = -1;
@@ -454,6 +498,10 @@ function placeConveyorRouting(selection, team, allPlans) {
         let reach = 0;
         for (let t5 = 0; t5 < terminals.length; t5++) {
             if (dist[(terminals[t5].y - y0) * w + (terminals[t5].x - x0)] >= 0) reach++;
+        }
+        let compSize = 0;
+        for (let c5 = 0; c5 < w * h; c5++) {
+            if (dist[c5] >= 0) compSize++;
         }
         let reachesT = false;
         let candDistT = -1;
@@ -470,12 +518,20 @@ function placeConveyorRouting(selection, team, allPlans) {
             better = reachesT;
         } else if (reachesT && bestReachesT && candDistT !== bestDistT) {
             better = candDistT < bestDistT;
+        } else if (compSize !== bestCompSize) {
+            // a bigger free-space component makes a healthier tree
+            better = compSize > bestCompSize;
+        } else if (core !== null) {
+            // prefer the seed on the core side, so the exit points toward the base
+            better = ((terminals[cand].x - cx) * (core.x - cx) + (terminals[cand].y - cy) * (core.y - cy))
+                > ((root.x - cx) * (core.x - cx) + (root.y - cy) * (core.y - cy));
         } else {
             better = cheb > bestCheb;
         }
 
         if (better) {
             bestReach = reach;
+            bestCompSize = compSize;
             bestReachesT = reachesT;
             bestDistT = candDistT;
             bestCheb = cheb;
@@ -484,16 +540,22 @@ function placeConveyorRouting(selection, team, allPlans) {
     }
     routeFlood(free, dist, w, h, root.x - x0, root.y - y0);
 
+    // snapshot the sink tile: terminal entries are mutated while walking, but every
+    // later stage (line, coverage, exit) must use the original root position
+    let rootX0 = root.x;
+    let rootY0 = root.y;
+
     let placed = [];
+    let treeBeltCount = 0;
 
     // transport line first: lay the path from the root to the nearby transport
     // BEFORE the tree grows, so the corridor can never be walled off by the tree
     // itself; tree chains then merge into this line wherever they meet it
     let linePlaced = 0;
-    let rootIdx = (root.y - y0) * w + (root.x - x0);
+    let rootIdx = (rootY0 - y0) * w + (rootX0 - x0);
     if (target !== null && distT !== null && distT[rootIdx] >= 0) {
-        let cxi = root.x;
-        let cyi = root.y;
+        let cxi = rootX0;
+        let cyi = rootY0;
         let lastRot = -1;
         let guard2 = 0;
         while (guard2++ < w * h) {
@@ -528,6 +590,7 @@ function placeConveyorRouting(selection, team, allPlans) {
             allPlans.push(new BuildPlan(cxi | 0, cyi | 0, rot | 0, belt));
             placed[idx] = 1;
             linePlaced++;
+            treeBeltCount++;
             if (dT === 1) break;
             cxi += ROUTING_DIR_X[rot];
             cyi += ROUTING_DIR_Y[rot];
@@ -538,9 +601,12 @@ function placeConveyorRouting(selection, team, allPlans) {
     // walk every seed up the gradient toward the exit, merging into existing belts;
     // prefer going straight so routes look clean instead of staircase-y
     for (let t2 = 0; t2 < terminals.length; t2++) {
-        // among the drill's free perimeter tiles, start from the one nearest the exit
+        // among the drill's free perimeter tiles, start from the one nearest the exit;
+        // the sink tile itself (dist 0) is never used as a walk start
         let b4 = terminals[t2].bounds;
-        let bestDist = (terminals[t2].y - y0) * w + (terminals[t2].x - x0) >= 0 ? dist[(terminals[t2].y - y0) * w + (terminals[t2].x - x0)] : -1;
+        let bestDist = -1;
+        let idxSeed = (terminals[t2].y - y0) * w + (terminals[t2].x - x0);
+        if (idxSeed >= 0 && dist[idxSeed] >= 1) bestDist = dist[idxSeed];
         let bestX = terminals[t2].x;
         let bestY = terminals[t2].y;
         for (let ax2 = b4.minX - 1; ax2 <= b4.maxX; ax2++) {
@@ -549,7 +615,7 @@ function placeConveyorRouting(selection, team, allPlans) {
                 if (!onPerimeter2) continue;
                 if (ax2 < x0 || ay2 < y0 || ax2 > x1 || ay2 > y1) continue;
                 let idx2 = (ay2 - y0) * w + (ax2 - x0);
-                if (free[idx2] === 1 && dist[idx2] >= 0 && (bestDist < 0 || dist[idx2] < bestDist)) {
+                if (free[idx2] === 1 && dist[idx2] >= 1 && (bestDist < 0 || dist[idx2] < bestDist)) {
                     bestDist = dist[idx2];
                     bestX = ax2;
                     bestY = ay2;
@@ -584,6 +650,7 @@ function placeConveyorRouting(selection, team, allPlans) {
 
             allPlans.push(new BuildPlan(cxi | 0, cyi | 0, rot | 0, belt));
             placed[idx] = 1;
+            treeBeltCount++;
             cxi += ROUTING_DIR_X[rot];
             cyi += ROUTING_DIR_Y[rot];
             lastRot = rot;
@@ -611,7 +678,13 @@ function placeConveyorRouting(selection, team, allPlans) {
                 if (!onP) continue;
                 if (ax5 < x0 || ay5 < y0 || ax5 > x1 || ay5 > y1) continue;
                 let idx5 = (ay5 - y0) * w + (ax5 - x0);
-                if (placed[idx5] === 1) covered = true;
+                // the sink tile drains a drill only when a real tree feeds it;
+                // otherwise the drill still needs its own jump or stub
+                if (idx5 === rootIdx) {
+                    if (treeBeltCount > 0) covered = true;
+                } else if (placed[idx5] === 1) {
+                    covered = true;
+                }
             }
         }
         if (covered) continue;
@@ -636,13 +709,37 @@ function placeConveyorRouting(selection, team, allPlans) {
             }
         }
         if (stub !== null) {
-            // first try a mechanical-style bridge jump into the network
+            // first try a mechanical-style bridge jump into the network (a few ring
+            // tiles are tried as starts, since dense clusters need a lucky landing spot)
             if (tryBridgeJump(b5, stub, team, allPlans, beltPos, placed, w, h, x0, y0, x1, y1)) continue;
+            let jumped2 = false;
+            let tries2 = 0;
+            for (let ax7 = b5.minX - 1; ax7 <= b5.maxX && !jumped2 && tries2 < 3; ax7++) {
+                for (let ay7 = b5.minY - 1; ay7 <= b5.maxY && !jumped2 && tries2 < 3; ay7++) {
+                    let onP7 = (ax7 === b5.minX - 1 || ax7 === b5.maxX || ay7 === b5.minY - 1 || ay7 === b5.maxY);
+                    if (!onP7) continue;
+                    if (ax7 === stub.x && ay7 === stub.y) continue;
+                    if (ax7 < x0 || ay7 < y0 || ax7 > x1 || ay7 > y1) continue;
+                    let idx7 = (ay7 - y0) * w + (ax7 - x0);
+                    if (free[idx7] !== 1 || placed[idx7] === 1) continue;
+                    tries2++;
+                    if (tryBridgeJump(b5, { x: ax7, y: ay7 }, team, allPlans, beltPos, placed, w, h, x0, y0, x1, y1)) jumped2 = true;
+                }
+            }
+            if (jumped2) continue;
 
             // no jump available: place a plain stub belt, only ever aimed at an empty
             // tile, so stub flows stay one-way (no belt loops)
-            let rot6 = pickEmptyRotation(placed, free, w, h, x0, y0, x1, y1, stub.x, stub.y, awayRotation(b5, stub.x, stub.y));
-            if (rot6 !== -1) {
+            let stubPref = awayRotation(b5, stub.x, stub.y);
+            if (core !== null) {
+                let cd = dirToward(stub.x, stub.y, core.x, core.y);
+                let cdx = stub.x + ROUTING_DIR_X[cd];
+                let cdy = stub.y + ROUTING_DIR_Y[cd];
+                let intoDrill = cdx >= b5.minX && cdx < b5.maxX && cdy >= b5.minY && cdy < b5.maxY;
+                if (!intoDrill) stubPref = cd;
+            }
+            let rot6 = pickEmptyRotation(placed, free, w, h, x0, y0, x1, y1, stub.x, stub.y, stubPref);
+            if (rot6 !== -1 && placed[(stub.y - y0) * w + (stub.x - x0)] !== 1) {
                 allPlans.push(new BuildPlan(stub.x | 0, stub.y | 0, rot6 | 0, belt));
                 placed[(stub.y - y0) * w + (stub.x - x0)] = 1;
             }
@@ -652,18 +749,24 @@ function placeConveyorRouting(selection, team, allPlans) {
     // exit belt: keep the flow going outward from the tree (only when no transport line was built)
     if (linePlaced === 0 && placed[rootIdx] !== 1) {
         let preferred = -1;
-        if (root.x - 1 >= x0 && dist[(root.y - y0) * w + (root.x - 1 - x0)] === 1) preferred = 0;
-        else if (root.y - 1 >= y0 && dist[(root.y - 1 - y0) * w + (root.x - x0)] === 1) preferred = 1;
-        else if (root.x + 1 <= x1 && dist[(root.y - y0) * w + (root.x + 1 - x0)] === 1) preferred = 2;
-        else if (root.y + 1 <= y1 && dist[(root.y + 1 - y0) * w + (root.x - x0)] === 1) preferred = 3;
-        if (preferred === -1 && root.bounds !== undefined) {
-            // dead-end pocket: still give the drill a belt, aimed away from it
-            preferred = awayRotation(root.bounds, root.x, root.y);
+        if (core !== null) {
+            // aim the exit toward the player's core
+            preferred = dirToward(rootX0, rootY0, core.x, core.y);
+        }
+        if (preferred === -1) {
+            if (rootX0 - 1 >= x0 && dist[(rootY0 - y0) * w + (rootX0 - 1 - x0)] === 1) preferred = 0;
+            else if (rootY0 - 1 >= y0 && dist[(rootY0 - 1 - y0) * w + (rootX0 - x0)] === 1) preferred = 1;
+            else if (rootX0 + 1 <= x1 && dist[(rootY0 - y0) * w + (rootX0 + 1 - x0)] === 1) preferred = 2;
+            else if (rootY0 + 1 <= y1 && dist[(rootY0 + 1 - y0) * w + (rootX0 - x0)] === 1) preferred = 3;
+            if (preferred === -1 && root.bounds !== undefined) {
+                // dead-end pocket: still give the drill a belt, aimed away from it
+                preferred = awayRotation(root.bounds, rootX0, rootY0);
+            }
         }
         // only ever aim at an empty tile: aiming into the tree itself would loop items forever
-        let erot = pickEmptyRotation(placed, free, w, h, x0, y0, x1, y1, root.x, root.y, preferred);
+        let erot = pickEmptyRotation(placed, free, w, h, x0, y0, x1, y1, rootX0, rootY0, preferred);
         if (erot !== -1) {
-            allPlans.push(new BuildPlan(root.x | 0, root.y | 0, erot | 0, belt));
+            allPlans.push(new BuildPlan(rootX0 | 0, rootY0 | 0, erot | 0, belt));
         }
     }
 }

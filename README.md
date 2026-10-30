@@ -21,7 +21,8 @@ itself changed: same buttons, same layouts, same settings.
   conveyor/duct tree. The tree automatically merges into the nearest existing
   belt, container or core (within ~24 tiles) so patches drain straight into
   your logistics; if nothing is nearby, the tree exits at the patch edge for
-  you to connect. Every drill gets a connection when physically possible —
+  you to connect (when nothing is nearby, the exit aims toward your core).
+  Every drill gets a connection when physically possible —
   drills sealed inside a dense cluster get a mechanical-style bridge jump into
   the network (item bridges hop over the blocking drills), or a stub belt to
   extend when no jump is possible.
