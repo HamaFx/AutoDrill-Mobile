@@ -28,7 +28,7 @@ itself changed: same buttons, same layouts, same settings.
 **Option A — in game (recommended)**
 
 1. Update Mindustry to **8.158 or newer**.
-2. Mods → Import Mod → Import from GitHub → `Pointifix/AutoDrill-Mobile`
+2. Mods → Import Mod → Import from GitHub → `HamaFx/AutoDrill-Mobile`
    (or pick the `.zip` route below).
 3. Enable the mod and restart the game when asked.
 
