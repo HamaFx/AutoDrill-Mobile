@@ -5,6 +5,7 @@ const Util = require("util");
 // Conveyor routing tuning (laser / airblast fills only).
 const ROUTING_TARGET_RADIUS = 24;
 const ROUTING_MAX_GRID = 220;
+const ROUTING_BRIDGE_RANGE = 4;
 const ROUTING_DIR_X = [1, 0, -1, 0];
 const ROUTING_DIR_Y = [0, 1, 0, -1];
 
@@ -228,6 +229,95 @@ function routeFlood(free, dist, w, h, sx, sy) {
         if (gx - 1 >= 0 && free[cur - 1] === 1 && dist[cur - 1] === -1) { dist[cur - 1] = nd; queue.push(cur - 1); }
         if (gy - 1 >= 0 && free[cur - w] === 1 && dist[cur - w] === -1) { dist[cur - w] = nd; queue.push(cur - w); }
     }
+}
+
+/**
+ * Mechanical-drill style bridge jump: when a drill cannot be reached by belts,
+ * send its output over the blockage instead. Finds an axis-aligned chain of
+ * item bridges (first bridge on the drill's free ring tile, each hop at most
+ * ROUTING_BRIDGE_RANGE tiles - hops may cross over drills and obstacles) that
+ * ends next to the existing belt network, where the outlet bridge dumps into it.
+ */
+function tryBridgeJump(bounds, stub, team, allPlans, beltPos, placed, w, h, x0, y0, x1, y1) {
+    let maxHops = 4;
+    let visited = {};
+    visited[stub.x + "," + stub.y] = true;
+    let queue = [{ x: stub.x, y: stub.y, dir: -1, hop: 0, path: [{ x: stub.x, y: stub.y }] }];
+    let head = 0;
+
+    while (head < queue.length) {
+        let cur = queue[head++];
+        if (cur.hop >= maxHops) continue;
+
+        let order = stepOrder(cur.dir < 0 ? -1 : cur.dir);
+        for (let oi = 0; oi < 4; oi++) {
+            let dj = order[oi];
+            if (cur.dir >= 0 && dj === (cur.dir + 2) % 4) continue; // no u-turns
+
+            let dxj = ROUTING_DIR_X[dj];
+            let dyj = ROUTING_DIR_Y[dj];
+
+            if (cur.hop === 0) {
+                // the first hop must not aim back through the drill itself
+                let fx = stub.x + dxj;
+                let fy = stub.y + dyj;
+                if (fx >= bounds.minX && fx < bounds.maxX && fy >= bounds.minY && fy < bounds.maxY) continue;
+            }
+
+            for (let jd = 2; jd <= ROUTING_BRIDGE_RANGE; jd++) {
+                let px = cur.x + dxj * jd;
+                let py = cur.y + dyj * jd;
+                if (visited[px + "," + py]) continue;
+                if (!Util.canPlaceBlock(Blocks.itemBridge, team, px, py, 0)) continue;
+                if (Util.footprintOverlapsPlanned(Blocks.itemBridge, px, py, allPlans)) continue;
+                visited[px + "," + py] = true;
+
+                let touchesNet = false;
+                for (let sj = 0; sj < 4 && !touchesNet; sj++) {
+                    if (beltPos[(px + ROUTING_DIR_X[sj]) + "," + (py + ROUTING_DIR_Y[sj])] === 1) touchesNet = true;
+                }
+
+                if (touchesNet) {
+                    // build the chain: every bridge links to the next, the last is an outlet
+                    let path = cur.path.slice();
+                    path.push({ x: px, y: py });
+                    let plans = [];
+                    let ok = true;
+                    for (let pi = 0; pi < path.length && ok; pi++) {
+                        let isLast = pi === path.length - 1;
+                        let cfgX = 0;
+                        let cfgY = 0;
+                        if (!isLast) {
+                            cfgX = path[pi + 1].x - path[pi].x;
+                            cfgY = path[pi + 1].y - path[pi].y;
+                        }
+                        let plan = new BuildPlan(path[pi].x | 0, path[pi].y | 0, 0, Blocks.itemBridge, new Point2(cfgX | 0, cfgY | 0));
+                        if (!Util.canPlaceWithoutPlanCollision(plan, team, allPlans)) {
+                            ok = false;
+                        } else {
+                            plans.push(plan);
+                        }
+                    }
+                    if (ok) {
+                        for (let pi2 = 0; pi2 < plans.length; pi2++) {
+                            allPlans.push(plans[pi2]);
+                            let tx = plans[pi2].x | 0;
+                            let ty = plans[pi2].y | 0;
+                            if (tx >= x0 && tx <= x1 && ty >= y0 && ty <= y1) {
+                                placed[(ty - y0) * w + (tx - x0)] = 1;
+                            }
+                        }
+                        return true;
+                    }
+                }
+
+                let npath = cur.path.slice();
+                npath.push({ x: px, y: py });
+                queue.push({ x: px, y: py, dir: dj, hop: cur.hop + 1, path: npath });
+            }
+        }
+    }
+    return false;
 }
 
 function placeConveyorRouting(selection, team, allPlans) {
@@ -500,8 +590,18 @@ function placeConveyorRouting(selection, team, allPlans) {
         }
     }
 
-    // coverage pass: any drill still without an adjacent belt gets a stub, so
-    // every drill can drain its ore (even in sealed pockets that the tree can't reach)
+    // coverage pass: any drill still without an adjacent belt gets a connection, so
+    // every drill can drain its ore (even in sealed pockets that the tree can't reach).
+    // where possible a mechanical-style bridge jump is used: a bridge at the drill's
+    // free ring tile links to an outlet bridge 2-4 tiles away that dumps into the
+    // network, closing what would otherwise be a dead-end stub
+    let beltPos = {};
+    for (let bp = 0; bp < allPlans.length; bp++) {
+        if (allPlans[bp].block === belt) {
+            beltPos[(allPlans[bp].x | 0) + "," + (allPlans[bp].y | 0)] = 1;
+        }
+    }
+
     for (let s2 = 0; s2 < selection.length; s2++) {
         let b5 = selection[s2].bounds;
         let covered = false;
@@ -536,7 +636,11 @@ function placeConveyorRouting(selection, team, allPlans) {
             }
         }
         if (stub !== null) {
-            // only ever aim at an empty tile, so stub flows stay one-way (no belt loops)
+            // first try a mechanical-style bridge jump into the network
+            if (tryBridgeJump(b5, stub, team, allPlans, beltPos, placed, w, h, x0, y0, x1, y1)) continue;
+
+            // no jump available: place a plain stub belt, only ever aimed at an empty
+            // tile, so stub flows stay one-way (no belt loops)
             let rot6 = pickEmptyRotation(placed, free, w, h, x0, y0, x1, y1, stub.x, stub.y, awayRotation(b5, stub.x, stub.y));
             if (rot6 !== -1) {
                 allPlans.push(new BuildPlan(stub.x | 0, stub.y | 0, rot6 | 0, belt));
