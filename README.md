@@ -16,11 +16,8 @@ itself changed: same buttons, same layouts, same settings.
   the classic modulo-6 lattice and wires them together with an item-bridge
   network, exiting in the chosen direction.
 - **Laser / Airblast drill**: finds the best non-overlapping drill layout with
-  a branch-and-bound search, places water extractors and power nodes next to
-  each drill, and (optionally) routes every drill's output into a connected
-  conveyor/duct tree that exits at the patch edge — connect that exit to your
-  base. Toggle it via **Place Conveyor Routing** in the mod settings; with the
-  toggle off the fill behaves exactly as before.
+  a branch-and-bound search and places water extractors and power nodes next to
+  each drill.
 - **Plasma bore (Erekir)**: fills wall ore with plasma bores, routes ducts
   back to the base direction and chains beam nodes.
 - Automatic detection of the mineralled patch, minimum-ore thresholds and max
