@@ -93,6 +93,9 @@ Mindustry iOS JavaScript engine (Rhino 1.7.x in interpreter mode,
 - public Java fields shadow same-named methods in Rhino: `Element.visible` is a
   field, so dynamic visibility is set via the `visibility` field instead of
   calling `visible(Boolp)`;
+- never use JavaScript `Set`/`Map`: `Set.add` routes through `java.util.HashMap.putIfAbsent`,
+  which does not exist in RoboVM's JDK and hard-crashes the app — use arc's `IntSet`
+  (already imported by `global.js`) or plain objects for visited-sets;
 - no template literals (`${...}` is not interpolated);
 - no `for (const x of ...)` (syntax error in that engine);
 - top-level declarations always get an initializer;

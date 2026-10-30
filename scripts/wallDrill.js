@@ -28,7 +28,7 @@ function getConnectedWallTiles(tile, direction) {
     let queue = [tile];
     let head = 0;
     const tiles = [];
-    let visited = new Set();
+    let visited = new IntSet();
     let sourceItem = tile.wallDrop();
 
     let baseSetting = Core.settings.getInt("mechanical-drill-max-tiles", 200);
@@ -37,7 +37,7 @@ function getConnectedWallTiles(tile, direction) {
     while (head < queue.length && tiles.length < maxTiles) {
         let currentTile = queue[head++];
         let pos = currentTile.pos();
-        if (visited.has(pos)) continue;
+        if (visited.contains(pos)) continue;
 
         if (currentTile.wallDrop() === sourceItem) {
             for (let dx = -2; dx <= 2; dx++) {
@@ -47,7 +47,7 @@ function getConnectedWallTiles(tile, direction) {
                     if (neighbor == null) continue;
 
                     let nearby = neighbor.nearby((-direction.x) | 0, (-direction.y) | 0);
-                    if (!visited.has(neighbor.pos()) && nearby != null && !nearby.solid()) {
+                    if (!visited.contains(neighbor.pos()) && nearby != null && !nearby.solid()) {
                         queue.push(neighbor);
                     }
                 }
@@ -91,7 +91,7 @@ function fill(tile, drill, direction) {
     let tiles = getConnectedWallTiles(tile, direction);
 
     const boreTiles = [];
-    let occupiedSecondaryAxis = new Set();
+    let occupiedSecondaryAxis = new IntSet();
 
     let directionOpposite = Direction.getOpposite(direction);
     let offset = getDirectionOffsetForDrill(direction, drill);
@@ -118,7 +118,7 @@ function fill(tile, drill, direction) {
                 let sa = direction.secondaryAxis(boreTile.x, boreTile.y);
                 let occupied = false;
                 for (let j = -halfLow; j <= halfHigh; j++) {
-                    if (occupiedSecondaryAxis.has(sa + j)) {
+                    if (occupiedSecondaryAxis.contains(sa + j)) {
                         occupied = true;
                         break;
                     }

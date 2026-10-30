@@ -173,7 +173,7 @@ function countOre(tile, drill) {
 
 function expandArea(tiles, radius) {
     let r = radius | 0;
-    let seen = new Set();
+    let seen = new IntSet();
     for (let i = 0; i < tiles.length; i++) {
         seen.add(tiles[i].pos());
     }
@@ -187,7 +187,7 @@ function expandArea(tiles, radius) {
                 let nearby = tile.nearby(dx, dy);
                 if (nearby == null) continue;
                 let pos = nearby.pos();
-                if (!seen.has(pos)) {
+                if (!seen.contains(pos)) {
                     seen.add(pos);
                     expanded.push(nearby);
                 }
@@ -206,7 +206,7 @@ function getConnectedTiles(tile, maxTiles) {
     let queue = [tile];
     let head = 0;
     let tiles = [];
-    let visited = new Set();
+    let visited = new IntSet();
 
     let sourceItem = tile.drop();
     let wallBlock = Blocks.copperWall.environmentBuildable() ? Blocks.copperWall : Blocks.berylliumWall;
@@ -216,7 +216,7 @@ function getConnectedTiles(tile, maxTiles) {
         let currentTile = queue[head++];
         let pos = currentTile.pos();
 
-        if (visited.has(pos)) continue;
+        if (visited.contains(pos)) continue;
         if (!Build.validPlace(wallBlock, team, currentTile.x | 0, currentTile.y | 0, 0)) {
             continue;
         }
@@ -227,7 +227,7 @@ function getConnectedTiles(tile, maxTiles) {
                     if (dx === 0 && dy === 0) continue;
                     let neighbor = currentTile.nearby(dx, dy);
                     if (neighbor == null) continue;
-                    if (!visited.has(neighbor.pos())) {
+                    if (!visited.contains(neighbor.pos())) {
                         queue.push(neighbor);
                     }
                 }
