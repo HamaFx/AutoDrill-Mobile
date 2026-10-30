@@ -190,6 +190,7 @@ function registerSettings() {
         addSubGroup(function(sub) {
             sub.sliderPref(bundle.get("auto-drill.settings.optimization-quality"), 2, 1, 10, 1, strProc);
             sub.checkPref(bundle.get("auto-drill.settings.place-water-extractor-and-power-nodes"), true);
+            sub.checkPref(bundle.get("auto-drill.settings.place-conveyor-routing"), true);
         });
 
         settingsTable.button(bundle.get("settings.reset", "Reset to Defaults"), run(function() {
